@@ -170,7 +170,7 @@ spec:
             - name: EXPORTER_MODE
               value: 'netplugin'
         - name: contiv-netplugin
-          image: contiv/netplugin:__CONTIV_VERSION__
+          image: sw4iot/netplugin:__CONTIV_VERSION__
           env:
             - name: CONTIV_ROLE
               value: netplugin
@@ -301,7 +301,7 @@ spec:
             - name: EXPORTER_MODE
               value: 'netmaster'
         - name: contiv-netmaster
-          image: contiv/netplugin:__CONTIV_VERSION__
+          image: sw4iot/netplugin:__CONTIV_VERSION__
           env:
             - name: CONTIV_ROLE
               value: netmaster
