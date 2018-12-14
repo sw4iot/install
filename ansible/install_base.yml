@@ -1,0 +1,7 @@
+# netplugin-node hosts set up netmast/netplugin in a cluster
+- name: Install Base
+  hosts: netplugin-node
+  become: true
+  environment: '{{ env }}'
+  roles:
+  - { role: base }

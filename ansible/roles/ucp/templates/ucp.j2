@@ -1,0 +1,142 @@
+#!/bin/bash
+
+usage="$0 start|stop"
+if [ $# -ne 1 ]; then
+    echo USAGE: $usage
+    exit 1
+fi
+
+case $1 in
+start)
+    set -e
+
+    echo starting ucp on {{ node_name }}[{{ node_addr }}]
+
+    {% if ucp_bootstrap_node_name != node_name -%}
+    # if node is running as a replica or worker make sure fingerprint file
+    # exists before procceeding
+    while [ 1 ]; do
+        if [ ! -f  "{{ ucp_remote_dir }}/{{ ucp_fingerprint_file }}" ]; then
+            echo `date` ": waiting for fingerprint file..."
+            sleep 5s
+        else
+            break
+        fi
+    done
+    {% endif %}
+
+    {% if ucp_bootstrap_node_name == node_name -%}
+    /usr/bin/docker run --rm -t --name ucp \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+    {% if ucp_license_file is defined -%}
+        -v {{ ucp_license_remote  }}:/docker_subscription.lic \
+    {% endif %}
+        docker/ucp install --host-address={{ node_addr }} \
+          --swarm-port={{ ucp_swarm_port }} --controller-port={{ ucp_controller_port }} \
+    {% if ucp_swarm_strategy != "spread" -%}
+          --{{ ucp_swarm_strategy }} \
+    {% endif -%}
+          --image-version={{ ucp_version }} --fresh-install
+
+    # copy out the instance ID
+    out=$(/usr/bin/docker run --rm --name ucp \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        docker/ucp id)
+    instanceId=$(echo ${out} | egrep -o '[A-Z0-9:]*')
+    if [ "${instanceId}" == "" ]; then
+        echo failed to parse instance-id
+        exit 1
+    fi
+    echo instance-id: ${instanceId}
+    echo ${instanceId} > "{{ ucp_remote_dir }}/{{ ucp_instance_id_file }}"
+
+    # copy out the fingerprint.
+    # XXX: we store the output in variable first than redirecting
+    # the output directly to file as we wait on this file to be created. So
+    # redirecting the output let's that task move forward even before the
+    # file contents have been written.
+    # XXX: we need a way for this fingerprint to stick around wherever
+    # contiv/cluster service is running. May be we can save this file on a
+    # distributed filesystem
+    out=$(/usr/bin/docker run --rm --name ucp \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        docker/ucp fingerprint)
+    fingerprint=$(echo ${out} | egrep -o 'Fingerprint=[A-Z0-9:]*' | \
+        awk --field-separator='=' '{print $2}')
+    if [ "${fingerprint}" == "" ]; then
+        echo failed to parse fingerprint
+        exit 1
+    fi
+    echo fingerprint: ${fingerprint}
+    echo ${fingerprint} > "{{ ucp_remote_dir }}/{{ ucp_fingerprint_file }}"
+
+    # Save the root CA Key on bootstrap node
+    # The root CA key is replicated to replicas for HA
+    /usr/bin/docker run --rm -i --name ucp \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        docker/ucp backup --root-ca-only --passphrase "{{ ucp_cert_secret }}" \
+        --id ${instanceId} > "{{ ucp_remote_dir }}"/cert.tar
+
+    # when directly dumping the output of docker/ucp backup to {{ ucp_certificate_file }}
+    # there is a big window where a empty {{ ucp_certificate_file }} is created first and
+    # then populated with data
+    # ansible fetch task picks up file of size 0 and the md5sum validation also passes
+    # so we create backup in a tmp file and then move it
+    mv "{{ ucp_remote_dir }}"/cert.tar "{{ ucp_remote_dir }}/{{ ucp_certificate_file }}"
+
+    {% else -%}
+    /usr/bin/docker run --rm -t --name ucp \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -e UCP_ADMIN_USER={{ ucp_admin_user }} -e UCP_ADMIN_PASSWORD={{ ucp_admin_password }} \
+    {% if run_as == "master" -%}
+        docker/ucp join {{ ucp_controller_replica }} --host-address={{ node_addr }} \
+    {% else -%}
+        docker/ucp join --host-address={{ node_addr }} \
+    {% endif %}
+          --swarm-port={{ ucp_swarm_port }} --controller-port={{ ucp_controller_port }} \
+          --image-version={{ ucp_version }} \
+          --url="https://{{ service_vip }}:443" \
+          --fingerprint=`cat "{{ ucp_remote_dir }}/{{ ucp_fingerprint_file }}"`
+
+    {% if run_as == "master" -%}
+    # On non-bootstrap master nodes, restore ucp certificates
+    /usr/bin/docker run -i --rm --name ucp \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        docker/ucp restore --root-ca-only --passphrase "{{ ucp_cert_secret }}" \
+        --id `cat "{{ ucp_remote_dir }}/{{ ucp_instance_id_file }}"` \
+        < "{{ ucp_remote_dir }}/{{ ucp_certificate_file }}"
+    {% endif %}
+
+    {% endif %}
+
+    # now just sleep to keep the service up
+    mkfifo "{{ ucp_remote_dir }}/{{ ucp_fifo_file }}"
+    < "{{ ucp_remote_dir }}/{{ ucp_fifo_file }}"
+    ;;
+
+stop)
+    # don't `set -e` as we shouldn't stop on error
+
+    #remove the fifo file
+    rm -f "{{ ucp_remote_dir }}/{{ ucp_fifo_file }}"
+
+    #stop the ucp containers and associated volumes
+    docker ps -a | grep 'ucp-' | awk '{print $1}' | xargs docker stop
+
+    #remove the ucp containers and associated volumes
+    docker ps -a | grep 'ucp-' | awk '{print $1}' | xargs docker rm -v
+
+    #explicitly try and remove ucp volumes (in case they were left over)
+    docker volume ls | grep ucp-* | awk '{print $2}' | xargs docker volume rm
+
+    # XXX: do we need to uninstall ucp too?
+    #/usr/bin/docker run --rm -t --name ucp \
+    #    -v /var/run/docker.sock:/var/run/docker.sock \
+    #    docker/ucp uninstall --id=`cat {{ ucp_remote_dir }}/{{ ucp_instance_id_file }}`
+    ;;
+
+*)
+    echo USAGE: $usage
+    exit 1
+    ;;
+esac

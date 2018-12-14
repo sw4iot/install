@@ -1,0 +1,4 @@
+---
+# Role defaults for scheduler stack
+
+scheduler_provider: "native-swarm" # Accepted values: native-swarm, ucp-swarm, kubernetes

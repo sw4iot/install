@@ -1,0 +1,30 @@
+---
+# This play contains tasks for cleaning up contiv_network services
+
+- name: cleanup ovs vlan state
+  shell: ovs-vsctl del-br contivVlanBridge
+
+- name: cleanup ovs vxlan state
+  shell: ovs-vsctl del-br contivVxlanBridge
+
+- name: cleanup ports
+  shell: >
+      set -x; for p in $(ifconfig  | grep vport | awk '{print $1}'); do
+        ip link delete $p type veth;
+      done
+  args:
+    executable: /bin/bash
+  register: ports
+
+- debug: var=ports
+
+- name: deny openvswitch_t type in selinux
+  shell: >
+      semanage permissive -d openvswitch_t
+  become: true
+
+- name: cleanup iptables for vxlan vtep port
+  shell: iptables -D INPUT -p udp --dport {{ item }} -j ACCEPT -m comment --comment "{{ netplugin_rule_comment }} ({{ item }})"
+  become: true
+  with_items:
+    - "{{ vxlan_port }}"

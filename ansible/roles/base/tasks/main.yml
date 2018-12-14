@@ -1,0 +1,12 @@
+---
+# This role contains tasks for install base packages
+
+- include: ubuntu_tasks.yml
+  when: ansible_os_family == "Debian"
+  tags:
+    - prebake-for-dev
+
+- include: redhat_tasks.yml
+  when: ansible_os_family == "RedHat"
+  tags:
+    - prebake-for-dev

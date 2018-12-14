@@ -1,0 +1,52 @@
+- name: download VBox (redhat)
+  get_url:
+    validate_certs: "{{ validate_certs }}"
+    url: http://download.virtualbox.org/virtualbox/{{ vbox_major_version }}/VirtualBox-{{ vbox_version_redhat }}_el7-1.x86_64.rpm
+    dest: /tmp/VirtualBox-{{ vbox_major_version }}.rpm
+    force: no
+
+- name: check for installed vbox (redhat)
+  shell: yum list installed | grep -i virtualbox | awk '{print $1}'
+  register: vbox_installed_version
+
+- name: stop vbox service if it is running
+  service: name=vbox state=stopped
+  when: not (vbox_installed_version.stdout | match('.*{{vbox_package_version}}.*'))
+  ignore_errors: yes
+
+- name: uninstall VBox (redhat)
+  yum: name="{{ vbox_installed_version.stdout }}" state=absent
+  when: not (vbox_installed_version.stdout | match('.*{{vbox_package_version}}.*'))
+
+- name: install VBox (redhat)
+  yum: name=/tmp/VirtualBox-{{ vbox_major_version }}.rpm state=present
+
+- name: install VBox dkms and dependencies (redhat)
+  yum: name={{ item }} state=latest
+  with_items:
+    - binutils
+    - gcc
+    - make
+    - patch
+    - libgomp
+    - glibc-headers
+    - glibc-devel
+    - kernel-headers
+    - kernel-devel
+    - dkms
+
+- name: copy systemd units for virtualbox-server
+  template: src=vbox.service.j2 dest=/etc/systemd/system/vbox.service
+
+- name: enable vbox to be started on boot-up and start it as well
+  service: name=vbox state=started enabled=yes
+
+- name: download vagrant (redhat)
+  get_url:
+    validate_certs: "{{ validate_certs }}"
+    url: https://releases.hashicorp.com/vagrant/{{ vagrant_version }}/vagrant_{{ vagrant_version }}_x86_64.rpm
+    dest: /tmp/vagrant_{{ vagrant_version }}.rpm
+    force: no
+
+- name: install vagrant (redhat)
+  yum: name=/tmp/vagrant_{{ vagrant_version }}.rpm state=present
