@@ -1,0 +1,18 @@
+---
+# Default values for docker role
+
+docker_api_port: 2385
+docker_version: 1.12.6
+docker_compose_version: 1.10.0
+docker_rule_comment: "docker api"
+docker_device: ""
+docker_device_size: "10000MB"
+docker_device_metadata_size: "1000MB"
+docker_cs_engine_supported_versions_ubuntu:
+    "wily": [ "1.10", "1.11", "1.12", "1.13" ]
+    "xenial": [ "1.11", "1.12", "1.13" ]
+    "Core": [""] # needed for redhat installations due to templating
+    "Maipo": [""] # needed for redhat installations due to templating
+docker_mount_flags: "shared"
+docker_reset_container_state: false
+docker_reset_image_state: false

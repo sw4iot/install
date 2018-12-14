@@ -1,0 +1,11 @@
+[Unit]
+Description=Volsupervisor
+After=auditd.service systemd-user-sessions.service time-sync.target etcd.service
+
+[Service]
+EnvironmentFile=/etc/default/volsupervisor
+ExecStart=/usr/bin/volsupervisor $VOLSUPERVISOR_ARGS
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+# install epel-release first to ensure the extra packages can be installed later
+- name: install epel release package (centos)
+  yum:
+    name: epel-release
+    state: latest
+  when: ansible_distribution != "RedHat"
+
+- name: install/upgrade base packages (redhat)
+  yum:
+    name: "{{ item }}"
+    update_cache: true
+    state: latest
+  with_items:
+    - yum-utils
+    - ntp
+    - unzip
+    - bzip2
+    - curl
+    - python-requests # XXX required by ceph repo, but it has a bad package on it
+    - bash-completion
+    - libselinux-python
+    - e2fsprogs
+    - openssh-server
+
+- name: install and start ntp
+  service: name=ntpd state=started enabled=yes

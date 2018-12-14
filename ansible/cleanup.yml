@@ -1,0 +1,31 @@
+---
+# This playbook performs service cleanup for contiv services.
+#
+# Note: cleanup is not expected to fail, so we set ignore_errors to yes here
+
+- hosts: all
+  become: true
+  ignore_errors: yes
+  tasks:
+    - include_vars: roles/{{ item }}/defaults/main.yml
+      with_items:
+        - "contiv_network"
+        - "contiv_storage"
+        - "swarm"
+        - "kubernetes"
+        - "ucp"
+        - "docker"
+        - "etcd"
+    - include: roles/{{ item }}/tasks/cleanup.yml
+      with_items:
+        - ucarp
+        - contiv_network
+        - contiv_storage
+        - swarm
+        - kubernetes
+        - ucp
+        - etcd
+        - nfs
+        - docker
+      static: no
+      ignore_errors: yes

@@ -1,0 +1,110 @@
+---
+# This role contains tasks for installing ovs
+
+# Local install
+- name: copy ovs file (redhat)
+  copy: src={{ contiv_standalone_binaries }}/openvswitch-2.5.0-2.el7.x86_64.rpm dest=/tmp/openvswitch-2.5.0-2.el7.x86_64.rpm
+  when: ansible_os_family == "RedHat" and contiv_network_local_install == True
+
+
+- name: install ovs (redhat)
+  yum: name=/tmp/openvswitch-2.5.0-2.el7.x86_64.rpm state=present
+  when: ansible_os_family == "RedHat" and contiv_network_local_install == True
+  tags:
+    - prebake-for-dev
+
+
+- name: copy ovs common file (debian)
+  copy: src={{ contiv_standalone_binaries }}/ovs-common.deb dest=/tmp/ovs-common.deb
+  when: ansible_os_family == "Debian" and contiv_network_local_install == True
+
+- name: copy ovs switch file (debian)
+  copy: src={{ contiv_standalone_binaries }}/ovs-switch.deb dest=/tmp/ovs-switch.deb
+  when: ansible_os_family == "Debian" and contiv_network_local_install == True
+
+
+
+- name: install ovs-common (debian)
+  apt: "deb=/tmp/ovs-common.deb"
+  when: ansible_os_family == "Debian" and contiv_network_local_install == True
+  tags:
+    - prebake-for-dev
+
+- name: install ovs (debian)
+  apt: "deb=/tmp/ovs-switch.deb"
+  when: ansible_os_family == "Debian" and contiv_network_local_install == True
+  tags:
+    - prebake-for-dev
+
+# Remote install
+
+- name: get the openvswitch RPM from centos.org
+  get_url:
+    url: https://cbs.centos.org/kojifiles/packages/openvswitch/2.5.0/2.el7/x86_64/openvswitch-2.5.0-2.el7.x86_64.rpm
+    dest: /tmp/openvswitch-2.5.0-2.el7.x86_64.rpm
+    checksum: sha256:2ff007391ede80f9887495526e8e1c45d1ce746b2b97efe8e258279ca3a75467
+  when: ansible_os_family == "RedHat" and contiv_network_local_install == False
+  tags:
+    - prebake-for-dev
+  register: ovs_rpm_download
+  ignore_errors: True
+
+- name: get the openvswitch RPM from GitHub
+  get_url:
+    url: https://github.com/contiv-experimental/files/raw/master/openvswitch-2.5.0-2.el7.x86_64.rpm
+    dest: /tmp/openvswitch-2.5.0-2.el7.x86_64.rpm
+    checksum: sha256:2ff007391ede80f9887495526e8e1c45d1ce746b2b97efe8e258279ca3a75467
+  when: ansible_os_family == "RedHat" and contiv_network_local_install == False and ovs_rpm_download|failed
+  tags:
+    - prebake-for-dev
+
+- name: install ovs (redhat)
+  yum: name=/tmp/openvswitch-2.5.0-2.el7.x86_64.rpm state=present
+  when: ansible_os_family == "RedHat" and contiv_network_local_install == False
+  tags:
+    - prebake-for-dev
+
+- name: install ovs-common (debian)
+  apt: 
+      name: openvswitch-common=2.5.*
+      state: present
+  when: ansible_os_family == "Debian" and contiv_network_local_install == False
+  tags:
+    - prebake-for-dev
+
+- name: install ovs (debian)
+  apt: 
+      name: openvswitch-switch=2.5.*
+      state: present
+  when: ansible_os_family == "Debian" and contiv_network_local_install == False
+  tags:
+    - prebake-for-dev
+
+- name: start ovs service
+  systemd: name=openvswitch daemon_reload=yes enabled=yes state=started
+  when: ansible_os_family == "RedHat"
+
+- name: setup ovs
+  shell: "ovs-vsctl set-manager {{ item }}"
+  with_items:
+    - "tcp:127.0.0.1:6640"
+    - "ptcp:6640"
+
+- name: check selinux status
+  shell: sestatus
+  register: selinux_set
+  when: (ansible_os_family == "RedHat")
+
+- name: permit openvswitch_t type in selinux
+  shell: >
+      semanage permissive -a openvswitch_t
+  when: (ansible_os_family == "RedHat") and (selinux_set.stdout | search(".*SELinux status:.*enabled.*"))
+  become: true
+
+- name: setup iptables for vxlan vtep port
+  shell: >
+      ( iptables -L INPUT | grep "{{ netplugin_rule_comment }} ({{ item }})" ) || \
+      iptables -I INPUT 1 -p udp --dport {{ item }} -j ACCEPT -m comment --comment "{{ netplugin_rule_comment }} ({{ item }})"
+  become: true
+  with_items:
+    - "{{ vxlan_port }}"

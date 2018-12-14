@@ -1,0 +1,66 @@
+---
+# This role contains tasks for configuring and starting clusterm service
+
+- name: copy shell script for starting collins
+  template: src=collins.j2 dest=/usr/bin/collins.sh mode=u=rwx,g=rx,o=rx
+  tags:
+    - prebake-for-dev
+
+- name: copy systemd units for collins
+  copy: src=collins.service dest=/etc/systemd/system/collins.service
+  tags:
+    - prebake-for-dev
+
+- name: check for collins image
+  shell: "docker images | grep {{ collins_image }} | grep -q {{ collins_image_version }}"
+  ignore_errors: true
+  register: collins_exists
+  tags:
+    - prebake-for-dev
+
+- name: pull collins container image
+  shell: "docker pull {{ collins_image }}:{{ collins_image_version }}"
+  when: not collins_exists|success
+  tags:
+    - prebake-for-dev
+
+- name: start collins
+  service: name=collins state=started
+
+- name: download clusterm
+  get_url:
+    validate_certs: "{{ validate_certs }}"
+    url: "{{ contiv_cluster_src_file }}" 
+    dest: "{{ contiv_cluster_dest_file }}"
+
+- name: install clusterm
+  shell: tar vxjf {{ contiv_cluster_dest_file }} 
+  args:
+    chdir: /usr/bin/
+
+- name: create conf dir for clusterm
+  file:
+    name: /etc/default/clusterm/
+    state: directory
+
+- name: copy conf files for clusterm
+  copy:
+    src: "{{ item.file }}"
+    dest: "/etc/default/clusterm/{{ item.file }}"
+    force: "{{ item.force }}"
+  with_items:
+    - { file: "{{ clusterm_args_file }}", force: "yes" }
+    - { file: "{{ clusterm_conf_file }}", force: "no" }
+
+- name: copy systemd units for clusterm
+  template: src=clusterm.j2 dest=/etc/systemd/system/clusterm.service
+
+- name: setup iptables for clusterm
+  shell: >
+      ( iptables -L INPUT | grep "{{ clusterm_rule_comment }} ({{ item }})" ) || \
+      iptables -I INPUT 1 -p tcp --dport {{ item }} -j ACCEPT -m comment --comment "{{ clusterm_rule_comment }} ({{ item }})"
+  with_items:
+    - "{{ clusterm_client_port }}"
+
+- name: start clusterm
+  service: name=clusterm state=started

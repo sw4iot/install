@@ -1,0 +1,6 @@
+---
+- include: ./server.yml
+  when: use_nfs_server
+
+- include: ./client.yml
+  when: not use_nfs_server

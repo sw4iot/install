@@ -1,0 +1,7 @@
+---
+
+## the comparison this way allows us to override ucarp when netmaster_ip is
+## non-nil. If it is nil, service_ip should be set to something unique.
+- name: install ucarp
+  include: install_ucarp.yml
+  when: netmaster_ip is undefined

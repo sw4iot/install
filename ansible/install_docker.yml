@@ -1,0 +1,7 @@
+# netplugin-node hosts set up netmast/netplugin in a cluster
+- name: Install docker
+  hosts: netplugin-node
+  become: true
+  environment: '{{ env }}'
+  roles:
+  - { role: docker, etcd_client_port1: 2379 }
