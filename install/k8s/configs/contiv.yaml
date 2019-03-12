@@ -170,7 +170,7 @@ spec:
             - name: EXPORTER_MODE
               value: 'netplugin'
         - name: contiv-netplugin
-          image: contiv/netplugin:__CONTIV_VERSION__
+          image: sw4iot/netplugin:1.3.0
           env:
             - name: CONTIV_ROLE
               value: netplugin
@@ -301,7 +301,7 @@ spec:
             - name: EXPORTER_MODE
               value: 'netmaster'
         - name: contiv-netmaster
-          image: contiv/netplugin:__CONTIV_VERSION__
+          image: sw4iot/netplugin:1.3.0
           env:
             - name: CONTIV_ROLE
               value: netmaster
@@ -339,7 +339,7 @@ spec:
               readOnly: false
 
         - name: contiv-api-proxy
-          image: contiv/auth_proxy:__API_PROXY_VERSION__
+          image: contiv/auth_proxy:1.2.0
           args:
             - --tls-key-file=/var/contiv/auth_proxy_key.pem
             - --tls-certificate=/var/contiv/auth_proxy_cert.pem
